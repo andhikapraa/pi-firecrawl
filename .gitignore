@@ -1,0 +1,22 @@
+node_modules/
+dist/
+.DS_Store
+
+# editor
+.vscode/
+.idea/
+
+# logs
+*.log
+npm-debug.log*
+
+# env / secrets
+.env
+.env.local
+.env.*.local
+
+# pi local state
+.pi/
+
+# npm pack artifacts
+*.tgz

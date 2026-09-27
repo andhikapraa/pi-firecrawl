@@ -520,7 +520,10 @@ async function firecrawlResearchRequest(path: string, params: Record<string, unk
   if (!apiKey) throw new Error(`${PACKAGE_NAME}: FIRECRAWL_API_KEY is not set.`);
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== null) query.set(key === "limit" ? "k" : key, String(value));
+    if (value !== undefined && value !== null) {
+      const parameter = key === "limit" ? "k" : key === "question" ? "query" : key;
+      query.set(parameter, String(value));
+    }
   }
   const url = `${settings.apiUrl}/v2${path}${query.size ? `?${query}` : ""}`;
   const response = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` }, signal });

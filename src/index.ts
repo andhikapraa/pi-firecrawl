@@ -452,6 +452,84 @@ const extractTool = defineTool({
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Tools: Firecrawl Research Index
+// ─────────────────────────────────────────────────────────────────────────────
+
+const researchSearchPapersTool = defineTool({
+  name: "firecrawl_research_search_papers",
+  label: "Firecrawl: Search Papers",
+  description:
+    "Search Firecrawl's Research Index for scientific papers by topic, method, benchmark, author, or category. Returns canonical paper IDs, abstracts, and scores.",
+  promptSnippet: "Search the Firecrawl Research Index for papers.",
+  parameters: Type.Object({
+    query: Type.String({ description: "Natural-language paper search query." }),
+    limit: Type.Optional(Type.Number({ description: "Maximum papers to return, 1-500." })),
+    authors: Type.Optional(Type.String()),
+    categories: Type.Optional(Type.String()),
+    from: Type.Optional(Type.String({ description: "Inclusive YYYY-MM-DD lower date bound." })),
+    to: Type.Optional(Type.String({ description: "Inclusive YYYY-MM-DD upper date bound." })),
+  }),
+  async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+    return withStatus(ctx, "🔥 paper search", async () =>
+      jsonResult(await firecrawlResearchRequest("/search/research/papers", params, signal))
+    );
+  },
+});
+
+const researchReadPaperTool = defineTool({
+  name: "firecrawl_research_read_paper",
+  label: "Firecrawl: Read Paper",
+  description:
+    "Inspect a Firecrawl Research Index paper by arXiv, DOI, PMID, PMCID, or canonical paper ID. Add a question to retrieve ranked full-text passages answering it.",
+  promptSnippet: "Read evidence passages from a research paper.",
+  parameters: Type.Object({
+    paperId: Type.String({ description: "Paper ID such as arxiv:1706.03762, doi:..., pmid:..., or pmcid:...." }),
+    question: Type.Optional(Type.String({ description: "Question used to rank relevant full-text passages." })),
+    limit: Type.Optional(Type.Number({ description: "Maximum passages to return." })),
+  }),
+  async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+    return withStatus(ctx, "🔥 paper read", async () => {
+      const { paperId, ...query } = params;
+      return jsonResult(await firecrawlResearchRequest(`/search/research/papers/${encodeURIComponent(paperId)}`, query, signal));
+    });
+  },
+});
+
+const researchRelatedPapersTool = defineTool({
+  name: "firecrawl_research_related_papers",
+  label: "Firecrawl: Related Papers",
+  description:
+    "Expand one paper through similar papers, citers, or references, ranked against a natural-language research intent.",
+  promptSnippet: "Find related, citing, or referenced papers.",
+  parameters: Type.Object({
+    paperId: Type.String({ description: "Seed paper ID." }),
+    intent: Type.String({ description: "Research intent used to rank related papers." }),
+    mode: Type.Optional(Type.Union([Type.Literal("similar"), Type.Literal("citers"), Type.Literal("references")])),
+    limit: Type.Optional(Type.Number({ description: "Maximum papers to return." })),
+  }),
+  async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+    return withStatus(ctx, "🔥 related papers", async () => {
+      const { paperId, ...query } = params;
+      return jsonResult(await firecrawlResearchRequest(`/search/research/papers/${encodeURIComponent(paperId)}/similar`, query, signal));
+    });
+  },
+});
+
+async function firecrawlResearchRequest(path: string, params: Record<string, unknown>, signal?: AbortSignal) {
+  const apiKey = process.env.FIRECRAWL_API_KEY?.trim();
+  if (!apiKey) throw new Error(`${PACKAGE_NAME}: FIRECRAWL_API_KEY is not set.`);
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null) query.set(key === "limit" ? "k" : key, String(value));
+  }
+  const url = `${settings.apiUrl}/v2${path}${query.size ? `?${query}` : ""}`;
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` }, signal });
+  const body = await response.text();
+  if (!response.ok) throw new Error(`Firecrawl Research Index HTTP ${response.status}: ${body.slice(0, 500)}`);
+  return JSON.parse(body) as unknown;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Extension entry point
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -465,6 +543,9 @@ export default function firecrawl(pi: ExtensionAPI) {
   pi.registerTool(batchScrapeTool);
   pi.registerTool(batchScrapeStatusTool);
   pi.registerTool(extractTool);
+  pi.registerTool(researchSearchPapersTool);
+  pi.registerTool(researchReadPaperTool);
+  pi.registerTool(researchRelatedPapersTool);
 
   pi.registerCommand("firecrawl", {
     description: "Show Firecrawl extension configuration status.",
